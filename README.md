@@ -4,9 +4,13 @@ Just a Test Repository
 ---
 # OpenCVによる背景ノイズ除去をJavaで作成する手順
 
-![元画像](https://github.com/MagariDIS/root/images/cleanOcr_imput.jpg)
+OCRには適さない 背景ありの暗い画像
 
-![クリーニング画像](https://github.com/MagariDIS/root/images/cleanOcr_output.jpg)
+![元画像](https://github.com/MagariDIS/root/blob/images/cleanOcr_imput.jpg)
+
+
+文字らしき物の輪郭を抽出しバックグラウンドを削除します
+![クリーニング画像](https://github.com/MagariDIS/root/blob/images/cleanOcr_output.jpg)
 
 
 ## 環境構築
