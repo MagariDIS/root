@@ -23,16 +23,22 @@ OCRには適さない 背景ありの暗い画像
 ## Install
 
 ### 1. JavaJDK（開発環境）の導入と OpenCVソースコードのダウンロード
+
 sudo apt install default-jdk
 
 cd /usr/local/src
-git clone https://github.com/opencv/opencv.git
-git clone https://github.com/opencv/opencv_contrib.git
 
+git clone https://github.com/opencv/opencv.git
 cd opencv
 git checkout 4.5.0
 
+git clone https://github.com/opencv/opencv_contrib.git
+
+cd opencv_contrib
+git checkout 4.5.0
+
 ### 2. コンパイル時のメモリー対策としてスワップファイルサイズを2Gへ変更
+
 swapon
 sudo sed -i -e 's/SWAPSIZE=.*/SWAPSIZE=2048/g' /etc/dphys-swapfile
 sudo systemctl restart dphys-swapfile.service
@@ -40,7 +46,8 @@ swapon
 
 
 ## 3. OpenCVのビルド
-mkdir -p build && cd build
+
+mkdir -p /usr/local/src/opencv/build && cd /usr/local/src/opencv/build
 
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-armhf
 cmake -DBUILD_SHARED_LIBS=OFF -DWITH_FFMPEG=ON -DOPENCV_EXTRA_MODULES_PATH=/usr/local/src/opencv_contrib/modules /usr/local/src/opencv ..
@@ -50,11 +57,14 @@ sudo make install
 sudo ldconfig
 
 ## 3.2 Javaラッパーをシンボリックリンクする
+
 cd /usr/java/packages/lib
 ln -s libopencv_java450.so -> /usr/local/share/java/opencv4/libopencv_java450.so
 
-## 4. ソースコード
-'''java:cleanOcr.java
+## 4. ソースコード cleanOcr.java
+
+```java
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -138,26 +148,36 @@ public class cleanOcr {
     }
 }
 
-'''
+```
 
 ## 5. コンパイルと実行
+
 javac -classpath /usr/local/share/java/opencv4/opencv-450.jar cleanOcr.java
 
 java -classpath .:/usr/local/share/java/opencv4/opencv-450.jar cleanOcr
 
-** 実行時にクラスパスを指定するが、カレントディレクトリも指定していないとMainが見つからないと言われるので注意
+*** 実行時にクラスパスを指定するが、カレントディレクトリも指定していないとMainが見つからないと言われるので注意 ***
 
 
-$ tesseract output.jpg output
+
+## 5.1 tesseract で OCR してみる
+
+tesseract output.jpg output
+
+```
 Tesseract Open Source OCR Engine v4.0.0 with Leptonica
 Warning: Invalid resolution 0 dpi. Using 70 instead.
 Estimating resolution as 1547
+```
 
-$ cat output.txt 
+cat output.txt 
+```
 NIA s 9:31 4
 NTSOI3SGR
 
 PB! 7OB02 4
+```
 
+結果は微妙ですが改善しています
 
 ---
