@@ -1,9 +1,11 @@
-# root
+# 最近の検証
 
 
 ---
-# OpenCVによる背景ノイズ除去をJavaで作成する手順
+# Rasberry PI 上でJavaJDK ＋ OpenCV 4.0 による背景ノイズ除去アプリを作成する手順
 ### AS OF 2020/10/17 
+
+
 
 OCRには適さない 背景ありの暗い画像
 
@@ -60,12 +62,12 @@ mkdir -p /usr/local/src/opencv/build && cd /usr/local/src/opencv/build
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-armhf
 cmake -DBUILD_SHARED_LIBS=OFF -DWITH_FFMPEG=ON -DOPENCV_EXTRA_MODULES_PATH=/usr/local/src/opencv_contrib/modules /usr/local/src/opencv ..
 
-make -j1
+make -j2
 sudo make install
 sudo ldconfig
 ```
 
-## 3.2 Javaラッパーをシンボリックリンクする
+### 3.1 Javaラッパーをシンボリックリンクする
 
 ```sh
 
@@ -75,19 +77,16 @@ ln -s libopencv_java450.so -> /usr/local/share/java/opencv4/libopencv_java450.so
 
 ## 4. ソースコード cleanOcr.java
 
+openCV 4.0 対応するように変更しました
+<a href="https://www.it-swarm-ja.tech/ja/java/%E7%94%BB%E5%83%8F%E3%81%8B%E3%82%89%E8%83%8C%E6%99%AF%E3%83%8E%E3%82%A4%E3%82%BA%E3%82%92%E9%99%A4%E5%8E%BB%E3%81%97%E3%81%A6%E3%80%81ocr%E3%81%AE%E3%83%86%E3%82%AD%E3%82%B9%E3%83%88%E3%82%92%E3%82%88%E3%82%8A%E6%98%8E%E7%A2%BA%E3%81%AB%E3%81%97%E3%81%BE%E3%81%99/1056484951/">オリジナルコードの所在</a>
+
+
 ```java
 
 import java.util.ArrayList;
 import java.util.List;
 
 import org.opencv.core.*;
-//import org.opencv.core.CvType;
-//import org.opencv.core.Mat;
-//import org.opencv.core.MatOfInt;
-//import org.opencv.core.MatOfInt4;
-//import org.opencv.core.MatOfPoint;
-//import org.opencv.core.Point;
-//import org.opencv.core.Scalar;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
 
@@ -96,8 +95,6 @@ public class cleanOcr {
     public static void main( String args[] ) {
 	System.loadLibrary( Core.NATIVE_LIBRARY_NAME );
 
-	// https://www.it-swarm-ja.tech/ja/java/%E7%94%BB%E5%83%8F%E3%81%8B%E3%82%89%E8%83%8C%E6%99%AF%E3%83%8E%E3%82%A4%E3%82%BA%E3%82%92%E9%99%A4%E5%8E%BB%E3%81%97%E3%81%A6%E3%80%81ocr%E3%81%AE%E3%83%86%E3%82%AD%E3%82%B9%E3%83%88%E3%82%92%E3%82%88%E3%82%8A%E6%98%8E%E7%A2%BA%E3%81%AB%E3%81%97%E3%81%BE%E3%81%99/1056484951/
-       // https://stackoverflow.com/questions/33881175/remove-background-noise-from-image-to-make-text-more-clear-for-ocr/38266049
 	// Mat im = Highgui.imread("imput.png", 0);
 	Mat im = Imgcodecs.imread("imput.jpg", 0);
 	// apply Otsu threshold
@@ -156,7 +153,7 @@ public class cleanOcr {
 	dibw8u.copyTo(cleaned, digitsMask);
 	// feed cleaned to Tesseract
 	Imgcodecs.imwrite("output.jpg", cleaned);
-    	System.out.println("grabcut sucess!");
+    	System.out.println("cleaning sucess!");
     }
 }
 
@@ -175,7 +172,7 @@ java -classpath .:/usr/local/share/java/opencv4/opencv-450.jar cleanOcr
 
 
 
-## 5.1 tesseract で OCR してみる
+### 5.1 tesseract で OCR してみる
 
 tesseract output.jpg output
 
