@@ -2,6 +2,299 @@
 
 
 ---
+# ESP8266 Linknode R4 で REST Apiによる 電源タップ制御アプリを作成する手順
+### AS OF 2020/10/24
+
+LinknodeR4をWifiWebサーバーとしてプログラムし、簡単なREST ApiでhttpGETおよびPOST要求に応答する物です。
+
+ESP8266でWiFiを使うときに、SSIDをコード内に埋め込まなくていいようにするWiFiManagerを使用しています
+
+## 1.　LinknodeR4　とは？
+
+LinkNode R4はWiFiリレーコントローラーで、Arduinoプログラミングに対応したESP-12f ESP8266 WiFiモジュールで動作します。 
+
+```
+ESP-12f ESP8266 WiFi moduleのスペック
+
+4 Channel リレーは 277V AC， 10A　又は　125V AC， 12A　まで対応
+
+5V DC power　端子にUSBコネクターを増設しています。
+
+ジャンパーPin 左側1-2番短絡で Program via UART　モード
+ジャンパーPin 右側2-3番短絡で Boot from flash　モード
+4 indiator LEDs　でリレーのON/OFF状態が表示れます
+```
+
+4つのリレーチャンネルがあり、各チャンネルはオンボードリレー経由でハイパワーデバイス(最大10A)を制御できます。
+
+詳しくはAmazonで
+https://www.amazon.co.jp/LinkSprite-211201004-LinkNode-WiFiリレーコントローラー-4チャンネルリレーモジュール
+
+
+## 2. 初期セットアップ
+電源オンを30秒程度でWi-Fiルーターの他に"AutoConnectAP"というAPが見つかります。
+
+これがLinknode R4（ESP8266）なので、これを選択します。
+ssidのパスワードは　password です。
+
+「Configure WiFi」をタップすると、近くにあるWi-Fi APのリストが表示されますので
+利用可能なAPを選択しパスワードを設定すると、自動的に再始動してますので
+以後は http://LinknodeR4.local:80/　で接続可能になります 
+
+
+## 3. 使い方
+
+使用するGPIOポートはソースにハードコートしています
+
+以下例では
+
+```
+int relays[] = { 14, 12, 13, 16 };  // GPIO pins for each relay
+```
+ GPIO  | relay num | LED  | 端子位置 
+:------:|:---------:|-------|:---------------------
+GPIO14 | 0番 | D4　LED | 左上のリレー
+GPIO12 | 1番 | D10　LED | 右上のリレー
+GPIO13 | 2番 | D8　LED | 左下のリレー
+GPIO16 | 3番 | D3　LED | 右下のリレー
+
+
+となります。
+
+### REST 呼び出しの例
+
+
+#### 1. 4番目の端子をON
+~~~
+http://linknoder4.local/api/relay/3/on　　
+~~~
+
+#### 2. 1番目の端子をOFF
+~~~
+http://linknoder4.local/api/relay/0/off　　
+~~~
+
+#### 3. 全ての端子をON
+~~~
+http://linknoder4.local/api/relay/all/on　　
+~~~
+
+#### 4. リレーの現状確認
+~~~
+http://linknoder4.local/api/relay/　
+~~~
+
+
+## 4. ソースコード 
+
+```ino
+
+/********************************************
+ * 
+ *  LinknodeR4 WifiWebサーバー
+ * 
+ * http postリクエストを実行してリレーをアクティブにし、
+ * GETリクエストを実行してステータスを取得します。
+ * もローカルネットワークに接続できます。
+ * 
+ * ##API Documentation
+ * 
+ * ## Wifi設定 をresetする
+ * http://sample.local/cmd?wifi=reset
+ * 
+ * ## 特定のリレーをONする　POST api/relay/<relay#>/on
+ * Response: 200 { "message": "Relay <relay#> ON" }
+ * 
+ * ##特定のリレーをOFFする　 POST api/relay/<relay#>/off
+ * Response: 200 { "message": "Relay <relay#> OFF" }
+ * 
+ * ##全てのリレーをONする POST api/relay/all/on
+ * Response: 200 { "message": "All Relays = ON" }
+ * 
+ * ##全てのリレーをOFFする POST api/relay/all/off 
+ * Response: 200 { "message": "All Relays = OFF" }
+ * 
+ * ##すべてのリレー状態を得る GET api/relay
+ * Response: 200 { "relays": [ state0, state1, state2, state3 ] } 
+ *
+ * 
+ * ##誤った操作 GET api/relay
+ * Response: 400 - Bad Request. Response body: { "message": "Invalid request" }
+ * 
+ * ******************************************/
+
+#include <FS.h>
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
+
+#include <WiFiManager.h> 
+
+
+ESP8266WebServer server(80);
+static const char* cpResponse200 = "<HTML>"
+ "<BODY style='background-color:#ffffde;font-family:sans-serif;font-size:40px;'>"
+ "CONTROL WEB<br/><br/>"
+ "<a href=/cmd?CMD=dummy>DUMMY</a><br/>"
+ "</BODY></HTML>\r\n";
+ 
+boolean deviceStates[] = { false, false, false, false };  // Initial state of each relay
+int relays[] = { 14, 12, 13, 16 };  // GPIO pins for each relay
+
+void setup(void){
+
+  Serial.begin(115200);
+  Serial.println("");
+
+ //WiFiManager
+  WiFiManager wifiManager;
+  wifiManager.setBreakAfterConfig(true);
+  if (!wifiManager.autoConnect("AutoConnectAP", "password")) {
+    Serial.println("failed to connect, we should reset as see if it connects");
+    delay(3000);
+    ESP.reset();
+    delay(5000);
+  }
+  
+  Serial.print("Connected to ");
+  Serial.println(WiFi.SSID());
+  
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  Serial.print("MAC address: ");
+  byte mac[6];
+  WiFi.macAddress(mac);
+  Serial.println(getMacString(mac));
+  
+  Serial.print("Gateway: ");
+  Serial.println(WiFi.gatewayIP());
+
+  // Set up mDNS responder:
+  if (!MDNS.begin("linknoder4")) { // linknoder4.local
+    Serial.println("Error setting up MDNS responder!");
+    while (1) {
+      delay(1000);
+    }
+  }
+  Serial.println("mDNS responder started");
+  Serial.println("");
+
+  // WebServer
+  server.begin();
+
+  // Add service to MDNS-SD
+  MDNS.addService("http", "tcp", 80);
+
+  server.on("/cmd", ctlCommand);
+
+  server.on("/api/relay", handleRoot);
+
+  Serial.println("Initialize relays...");
+  for (byte relay = 0; relay < sizeof(relays) / sizeof(int); relay++)  {
+    
+    pinMode(relays[relay], OUTPUT);
+    digitalWrite(relays[relay], deviceStates[relay] ? HIGH : LOW);
+
+    String request = "/api/relay/" + String(relay) + "/";
+    Serial.println("Relay " + String(relay) + " url: " + request);
+    server.on((request + "on").c_str(), [relay](){
+      setState(relay, true);
+    });
+    server.on((request + "off").c_str(), [relay](){
+      setState(relay, false);
+    });
+  }
+  server.on("/api/relay/all/on", [](){
+    setAll(true);
+  });
+
+  server.on("/api/relay/all/off", [](){
+    setAll(false);
+  });
+
+  server.onNotFound(handleNotFound);
+  server.begin();
+  
+  Serial.println("HTTP server started");
+}
+
+
+
+void loop(void){
+  MDNS.update();
+  server.handleClient();
+}
+
+// This method is called when a request is made to the root of the server. i.e. http://myserver
+void handleRoot() {
+  String response = "{ \"relays\": [ ";
+  String seperator = "";
+  for (int relay = 0; relay < sizeof(relays) / sizeof(int); relay++)  {
+    response += seperator + String(deviceStates[relay]);
+    seperator = ", ";
+  }
+  response += " ] }";
+  server.send(200, "application/json", response);
+}
+
+void ctlCommand() {
+  String cmd = server.arg("wifi");
+  if (cmd == "dummy")  {
+    // hogehoge...
+  }
+  else   if (cmd == "reset")  { //　resetコマンドでWiFi再設定
+    WiFiManager wifiManager;
+    delay(1000);
+    Serial.println("");
+    Serial.println("WiFi Reset !");
+    Serial.println("");
+    wifiManager.resetSettings();
+    delay(3000);
+    ESP.reset();
+  }
+  server.send(200, "text/html", cpResponse200);
+}
+
+
+// This method is called when an undefined url is specified by the caller
+void handleNotFound() {
+  server.send(400, "text/plain", "{ \"message\": \"Invalid request\" }");
+}
+
+void setAll(boolean state){
+  for (byte relay = 0; relay < sizeof(relays) / sizeof(int); relay++)  {
+    digitalWrite(relays[relay], state ? HIGH : LOW);
+    deviceStates[relay] = state;
+  }
+  String response = "All Relays = " + String(state ? "ON" : "OFF");
+  server.send(200, "application/json", "{ \"message\": \"" + response + "\" }");
+}
+
+void setState(int relay, boolean state) {
+    digitalWrite(relays[relay], state ? HIGH : LOW);
+    deviceStates[relay] = state;
+    String response = "Relay " + String(relay) + " " + (state ? "ON" : "OFF");
+    server.send(200, "application/json", "{ \"message\": \"" + response + "\" }");
+    Serial.println(response);
+}
+
+String getMacString(byte *mac) {
+  String result = "";
+  String seperator = "";
+  for(int b = 0; b < 6; b++) {
+    result += seperator + String(mac[b], HEX);
+    seperator = ":";
+  }
+  return result;
+}
+```
+
+
+
+
+---
 # Rasberry PI 上でJavaJDK ＋ OpenCV 4.0 による背景ノイズ除去アプリを作成する手順
 ### AS OF 2020/10/17 
 
